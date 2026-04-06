@@ -38,8 +38,9 @@ def filter_places_by_rules(places: list[PlaceInfo]) -> list[FilteredPlace]:
             classification = "outdoor"
             method = "default"
 
+        place_data = place.model_dump(exclude={"indoor_outdoor", "filter_method"})
         result.append(FilteredPlace(
-            **place.model_dump(),
+            **place_data,
             indoor_outdoor=classification,
             filter_method=method,
         ))
