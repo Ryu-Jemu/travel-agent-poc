@@ -1,0 +1,26 @@
+[project]
+name = "travel-agent-poc"
+version = "0.1.0"
+description = "LangGraph-based travel recommendation agent PoC"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=1.1.0",
+    "langchain-core>=0.3.36",
+    "langchain-google-genai>=4.2.1",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["agent*", "tools*", "models*"]
+
+[project.optional-dependencies]
+dev = [
+    "langgraph-cli[inmem]",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
