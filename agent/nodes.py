@@ -1,10 +1,13 @@
 from datetime import date
 
 from agent.state import AgentState
-from models.schemas import ParsedRequest
+from models.schemas import ParsedRequest, PlaceInfo
 from tools.weather import get_weather_mock
 from tools.place_search import search_places_mock
-from tools.place_filter import filter_places_by_rules
+from tools.place_filter import (
+    filter_places_by_rules,
+    filter_places_with_llm,
+)
 from tools.tag_search import match_tags_mock
 from tools.vector_search import vector_search_mock
 from tools.route_optimize import optimize_route_mock
@@ -32,14 +35,23 @@ def fetch_weather(state: AgentState) -> dict:
 
 def search_places(state: AgentState) -> dict:
     req = state["parsed_request"]
-    places = search_places_mock(req["latitude"], req["longitude"], req["radius_m"])
+    places = search_places_mock(
+        req["latitude"], req["longitude"], req["radius_m"],
+    )
     return {"raw_places": [p.model_dump() for p in places]}
 
 
-def filter_places(state: AgentState) -> dict:
-    from models.schemas import PlaceInfo
+async def filter_places(state: AgentState) -> dict:
     places = [PlaceInfo(**p) for p in state["raw_places"]]
-    filtered = filter_places_by_rules(places)
+
+    from config import get_llm
+    llm = get_llm()
+
+    if llm:
+        filtered = await filter_places_with_llm(places, llm)
+    else:
+        filtered = filter_places_by_rules(places)
+
     return {"filtered_places": [f.model_dump() for f in filtered]}
 
 
@@ -72,7 +84,11 @@ def score_and_select(state: AgentState) -> dict:
 
         is_bad = weather["is_bad_weather"]
         is_indoor = place["indoor_outdoor"] == "indoor"
-        weather_s = 1.0 if (is_bad and is_indoor) or (not is_bad and not is_indoor) else 0.5
+        weather_s = (
+            1.0
+            if (is_bad and is_indoor) or (not is_bad and not is_indoor)
+            else 0.5
+        )
 
         total = (tag_s * 0.4) + (vec_s * 0.4) + (weather_s * 0.2)
 
@@ -97,11 +113,13 @@ def score_and_select(state: AgentState) -> dict:
 def optimize_route(state: AgentState) -> dict:
     places = state["selected_places"]
     req = state["parsed_request"]
-    route = optimize_route_mock(places, req["latitude"], req["longitude"])
+    route = optimize_route_mock(
+        places, req["latitude"], req["longitude"],
+    )
     return {"route": route}
 
 
-def generate_response(state: AgentState) -> dict:
+async def generate_response(state: AgentState) -> dict:
     if state.get("error") or not state.get("selected_places"):
         return {"response": {
             "places": [],
@@ -110,9 +128,22 @@ def generate_response(state: AgentState) -> dict:
             "reasoning": "주변에 추천할 장소를 찾지 못했습니다.",
         }}
 
+    reasoning = ""
+    from config import get_llm
+    llm = get_llm()
+    if llm:
+        from agent.prompts import generate_reasoning
+        weather_desc = state["weather"]["description"]
+        place_names = [
+            p["name"] for p in state["selected_places"][:3]
+        ]
+        reasoning = await generate_reasoning(
+            llm, weather_desc, place_names,
+        )
+
     return {"response": {
         "places": state["selected_places"],
         "route": state.get("route"),
         "weather": state["weather"],
-        "reasoning": "",  # Phase 4에서 Gemini로 생성
+        "reasoning": reasoning,
     }}
