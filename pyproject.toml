@@ -15,6 +15,9 @@ dependencies = [
     "python-dotenv>=1.0.1",
 ]
 
+[tool.setuptools.packages.find]
+include = ["agent*", "tools*", "models*"]
+
 [project.optional-dependencies]
 dev = [
     "langgraph-cli[inmem]",
